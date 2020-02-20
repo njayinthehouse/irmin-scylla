@@ -1,10 +1,12 @@
 (library
   (name        irmin_scylla)
   (public_name irmin-scylla)
-  (libraries   irmin libcassandra)
+  (libraries   git irmin libcassandra)
   (foreign_stubs 
   (language    c)
   (names       cstub))
   )
 
-
+(env
+  (dev
+    (flags (:standard -warn-error -A))))
