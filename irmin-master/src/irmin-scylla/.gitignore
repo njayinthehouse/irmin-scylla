@@ -1,0 +1,7 @@
+dune-project
+irmin-scylla.opam
+log
+log
+.merlin
+*.*.swp
+_build/

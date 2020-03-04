@@ -110,22 +110,12 @@ let execute_query t query =
   ml_cass_future_wait future;
   let response = ml_cass_future_error_code future in
   let is_cass_ok = cstub_match_enum response future in
+  ml_cass_statement_free q;
   if is_cass_ok then
     Lwt.return_ok future
   else
     Lwt.return_error "Not CASS_OK"
     
-let execute_query_opt t query =
-  let q = ml_cass_statement_new query (cstub_convert 0) in
-  let future = ml_cass_session_execute t q in
-  ml_cass_future_wait future;
-  let response = ml_cass_future_error_code future in
-  let is_cass_ok = cstub_match_enum response future in
-  if is_cass_ok then
-    Some future
-  else 
-    None
-
 let v ip = 
   (* Create session, cluster, and connect them *)
   let session = ml_cass_session_new () in
@@ -139,7 +129,7 @@ let v ip =
     execute_query session create_keyspace >>= fun _ ->
     execute_query session create_dir_table >>= fun _ ->
     execute_query session create_file_table >>= fun _ ->
-    Lwt.return_ok session
+    Lwt.return_ok (session, cluster)
   else
     Lwt.return_error "Not CASS_OK"
 
@@ -158,6 +148,7 @@ module File = struct
     let result = ml_cass_future_get_result future in
     let cass_row_count = ml_cass_result_row_count result in
     let row_count = cstub_convert_to_ml cass_row_count in
+    ml_cass_future_free future;
     Lwt.return_ok (row_count = 1)
 
   let delete t path = 
@@ -165,7 +156,8 @@ module File = struct
     let query_str = 
       "DELETE FROM Irmin_scylla.File\
        WHERE key = '" ^ key ^ "'" in
-    execute_query t query_str >>= fun _ ->
+    execute_query t query_str >>= fun future ->
+    ml_cass_future_free future;
     Lwt.return_ok () 
 
   let move t path path' = 
@@ -175,7 +167,8 @@ module File = struct
       "UPDATE Irmin_scylla.File\
        SET key = '" ^ key' ^ "'\
        WHERE key = '" ^ key ^ "'" in
-    execute_query t query_str >>= fun _ ->
+    execute_query t query_str >>= fun future ->
+    ml_cass_future_free future;
     Lwt.return_ok ()
 
   let open_f t path = 
@@ -185,6 +178,7 @@ module File = struct
        WHERE key = '" ^ key ^ "'" in
     execute_query t query_str >>= fun future ->
     let result = ml_cass_future_get_result future in
+    ml_cass_future_free future;
     let cass_row_count = ml_cass_result_row_count result in
     let row_count = cstub_convert_to_ml cass_row_count in
     if row_count > 0 then
@@ -206,8 +200,9 @@ module File = struct
       "UPDATE Irmin_scylla.File\
        SET value = '" ^ value' ^ "'\
        WHERE key = '" ^ key ^ "'" in
-    execute_query t query_str >>= fun _ ->
+    execute_query t query_str >>= fun future ->
     begin 
+      ml_cass_future_free future;
       fd := (t, key, value');
       Lwt.return_ok 1
     end
@@ -256,6 +251,7 @@ module Dir = struct
        WHERE key = '" ^ key ^ "'" in
     execute_query t query_str >>= fun future -> 
     let result = ml_cass_future_get_result future in
+    ml_cass_future_free future;
     let cass_row_count = ml_cass_result_row_count result in
     let row_count = cstub_convert_to_ml cass_row_count in
     Lwt.return_ok (row_count = 1)
@@ -265,7 +261,8 @@ module Dir = struct
     let query_str = 
       "INSERT INTO Irmin_scylla.Dir\
        VALUES ('" ^ key ^ "')" in
-    execute_query t query_str >>= fun _ ->
+    execute_query t query_str >>= fun future ->
+    ml_cass_future_free future;
     Lwt.return_ok true
 
   let delete t path = 
@@ -273,7 +270,8 @@ module Dir = struct
     let query_str = 
       "DELETE FROM Irmin_scylla.Dir\
        WHERE key = '" ^ key ^ "'" in
-    execute_query t query_str >>= fun _ ->
+    execute_query t query_str >>= fun future ->
+    ml_cass_future_free future;
     Lwt.return_ok ()
 
   let contents t ?rel path = failwith "Unimplemented"
@@ -298,4 +296,8 @@ module FS = struct
   let has_global_watches = failwith "Wha?"
 
   let has_global_checkout = failwith "Wha?"
-end
+end 
+
+let closeSession = ml_cass_session_free
+
+let closeCluster = ml_cass_cluster_free

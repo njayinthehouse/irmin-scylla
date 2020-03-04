@@ -1,11 +1,12 @@
 
 type cassSession
+type cassCluster
 
 type t = cassSession
 type error = string
 type ip = string
 
-val v : ip -> (t, error) Lwt_result.t
+val v : ip -> (t * cassCluster, error) Lwt_result.t
 
 module File : Git.FILE 
   with type t = t 
@@ -27,3 +28,6 @@ module FS : Git.FS
    and module File = File
    and module Dir = Dir
    and module Mapper = Mapper
+
+val closeSession : cassSession -> unit
+val closeCluster : cassCluster -> unit
